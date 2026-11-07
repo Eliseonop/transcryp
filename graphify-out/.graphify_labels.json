@@ -1,0 +1,16 @@
+{
+  "0": "App",
+  "1": "Forma por línea de comandos",
+  "2": "gui.py",
+  "3": "config.py",
+  "4": "setup_modelos.py",
+  "5": "Path",
+  "6": "lanzar",
+  "7": "transcribir.py",
+  "8": "obtener_segmentos",
+  "9": "abrir_transcripcion",
+  "10": "_cargar_dlls_cuda",
+  "11": "tam_lote",
+  "12": "imprimir_fases",
+  "13": "__init__.py"
+}

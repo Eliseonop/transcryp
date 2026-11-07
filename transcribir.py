@@ -19,6 +19,13 @@ Opciones:
     --diarizar             separa e identifica hablantes (Hablante 1, 2...)
     --hablantes 2          nº de hablantes si lo sabes (def: automatico)
     --palabras             marca de tiempo por cada palabra (guarda .json)
+    --lote 16              trozos procesados a la vez (auto: 16 GPU / 8 CPU;
+                           1 = desactivar). Acelera MUCHO la transcripcion.
+
+Rendimiento:
+    - En GPU (CUDA) usa float16 y procesa los trozos por lotes: suele ir de
+      4x a 12x mas rapido que trozo a trozo.
+    - En CPU usa TODOS los hilos disponibles y tambien lotes.
 """
 import argparse
 import json
@@ -151,7 +158,11 @@ def hablante_de(inicio, fin, diar_segs):
 # ----------------------------- carga del modelo -----------------------------
 
 def cargar_modelo(nombre="large-v3", dispositivo="auto"):
-    """Carga WhisperModel eligiendo GPU/CPU. Devuelve (modelo, device, compute)."""
+    """Carga WhisperModel eligiendo GPU/CPU. Devuelve (modelo, device, compute).
+
+    En CPU usa TODOS los hilos disponibles (por defecto CTranslate2 solo usa 4).
+    En GPU usa float16. Para acelerar aun mas, la transcripcion usa lotes
+    (ver crear_pipeline / abrir_transcripcion)."""
     _cargar_dlls_cuda()
     from faster_whisper import WhisperModel
     device = dispositivo
@@ -162,18 +173,91 @@ def cargar_modelo(nombre="large-v3", dispositivo="auto"):
         except Exception:
             device = "cpu"
     compute = "float16" if device == "cuda" else "int8"
-    print(f"[i] Modelo: {nombre} | Dispositivo: {device} ({compute})")
+    hilos = os.cpu_count() or 4
+
+    def _crear(dev, comp):
+        kw = {}
+        if dev == "cpu":
+            # Usar todos los hilos del CPU (por defecto CTranslate2 usa solo 4).
+            kw["cpu_threads"] = hilos
+            kw["num_workers"] = 1
+        return WhisperModel(nombre, device=dev, compute_type=comp, **kw)
+
+    extra = f" | Hilos CPU: {hilos}" if device == "cpu" else ""
+    print(f"[i] Modelo: {nombre} | Dispositivo: {device} ({compute}){extra}")
     print("[i] Cargando modelo (la 1a vez descarga ~1-3 GB)...")
     try:
-        modelo = WhisperModel(nombre, device=device, compute_type=compute)
+        modelo = _crear(device, compute)
     except Exception as e:
         if device == "cuda":
             print(f"[!] Fallo la GPU ({e}). Reintentando en CPU...")
             device, compute = "cpu", "int8"
-            modelo = WhisperModel(nombre, device="cpu", compute_type="int8")
+            modelo = _crear(device, compute)
         else:
             raise
     return modelo, device, compute
+
+
+# ----------------------------- transcripcion por lotes (acelerada) -----------------------------
+
+def _vram_libre_mb():
+    """VRAM libre de la GPU (MB) via nvidia-smi. None si no se puede saber."""
+    try:
+        import subprocess
+        salida = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5)
+        return int(salida.stdout.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
+def tam_lote(device: str, nombre: str = "") -> int:
+    """Tamano de lote recomendado segun dispositivo, modelo y VRAM.
+
+    En GPU se pueden procesar varios trozos a la vez, pero un lote grande con
+    un modelo grande (large-v3 ocupa ~3 GB) agota la VRAM de tarjetas de 8 GB
+    y el proceso se queda TRABADO. Por eso se ajusta el lote a la memoria libre.
+    En CPU un lote modesto ya ayuda."""
+    if device != "cuda":
+        return 8
+    es_grande = "large" in nombre.lower()
+    libre = _vram_libre_mb()
+    if es_grande:
+        # large-v3: cada trozo del lote suma bastante activacion en VRAM.
+        if libre is not None and libre < 6000:   # tarjetas ~8 GB
+            return 4
+        if libre is not None and libre < 11000:  # ~12 GB
+            return 8
+        return 16
+    # Modelos medianos o pequenos: caben lotes mas grandes sin problema.
+    return 16
+
+
+def _crear_pipeline(modelo):
+    """Envuelve el modelo en un pipeline por lotes (BatchedInferencePipeline).
+    Devuelve None si esta version de faster-whisper no lo soporta."""
+    try:
+        from faster_whisper import BatchedInferencePipeline
+        return BatchedInferencePipeline(model=modelo)
+    except Exception:
+        return None
+
+
+def abrir_transcripcion(modelo, ruta: Path, idioma=None, palabras=False, lote=1):
+    """Inicia la transcripcion y devuelve (iterador_de_segmentos, info).
+
+    Si lote > 1 y esta disponible, usa el pipeline por lotes, que procesa
+    varios trozos de audio en paralelo (mucho mas rapido en GPU y en CPU).
+    Cae automaticamente al modo normal si el pipeline no existe."""
+    comun = dict(language=idioma, vad_filter=True, beam_size=5,
+                 word_timestamps=palabras)
+    if lote and lote > 1:
+        pipe = _crear_pipeline(modelo)
+        if pipe is not None:
+            return pipe.transcribe(str(ruta), batch_size=lote, **comun)
+    return modelo.transcribe(str(ruta), **comun)
 
 
 # ----------------------------- transcripcion de un archivo -----------------------------
@@ -184,15 +268,17 @@ def mmss(segundos: float) -> str:
     return f"{s // 60} min {s % 60} s" if s >= 60 else f"{s} s"
 
 
-def obtener_segmentos(modelo, entrada: Path, idioma=None, palabras=False, sd=None):
+def obtener_segmentos(modelo, entrada: Path, idioma=None, palabras=False, sd=None, lote=1):
     """Transcribe (y opcionalmente diariza) un archivo. Devuelve lista de segmentos."""
     print(f"\n[i] Archivo: {entrada.name}")
-    print("[i] Transcribiendo...")
+    if lote and lote > 1:
+        print(f"[i] Transcribiendo (por lotes, tamano {lote})...")
+    else:
+        print("[i] Transcribiendo...")
     t0 = time.time()
     con_palabras = palabras or (sd is not None)
-    seg_iter, info = modelo.transcribe(
-        str(entrada), language=idioma, vad_filter=True,
-        beam_size=5, word_timestamps=con_palabras)
+    seg_iter, info = abrir_transcripcion(
+        modelo, entrada, idioma=idioma, palabras=con_palabras, lote=lote)
     total = getattr(info, "duration", 0) or 0
     dur_txt = formato_tiempo(total).split(",")[0]
     print(f"[i] Idioma: {info.language} (prob {info.language_probability:.2f}) "
@@ -238,8 +324,9 @@ def imprimir_fases(fases):
         print(f"[i] Segunda fase (hablantes): demoro {mmss(fases['diarizacion'])}")
 
 
-def transcribir_archivo(modelo, entrada: Path, args, sd=None):
-    segmentos, fases = obtener_segmentos(modelo, entrada, args.idioma, args.palabras, sd)
+def transcribir_archivo(modelo, entrada: Path, args, sd=None, lote=1):
+    segmentos, fases = obtener_segmentos(
+        modelo, entrada, args.idioma, args.palabras, sd, lote)
     imprimir_fases(fases)
     print("[i] Guardando...")
     guardar(segmentos, entrada, args.formatos)
@@ -261,6 +348,9 @@ def main():
                    help="Nº de hablantes si lo sabes (def: automatico)")
     p.add_argument("--palabras", action="store_true",
                    help="Marca de tiempo por palabra (guarda .json)")
+    p.add_argument("--lote", type=int, default=-1,
+                   help="Tamano de lote para acelerar (auto: 16 GPU / 8 CPU; "
+                        "usa 1 para desactivar)")
     args = p.parse_args()
 
     try:
@@ -287,6 +377,10 @@ def main():
 
     modelo, device, compute = cargar_modelo(args.modelo, args.dispositivo)
 
+    lote = tam_lote(device, args.modelo) if args.lote is None or args.lote < 0 else args.lote
+    if lote and lote > 1:
+        print(f"[i] Aceleracion por lotes activada (tamano {lote}).")
+
     sd = None
     if args.diarizar:
         print("[i] Cargando diarizador (quien habla)...")
@@ -294,7 +388,7 @@ def main():
 
     for f in archivos:
         try:
-            transcribir_archivo(modelo, f, args, sd)
+            transcribir_archivo(modelo, f, args, sd, lote)
         except Exception as e:
             print(f"[X] Error con {f.name}: {e}")
 

@@ -21,7 +21,8 @@ Se abre la ventana: **arrastra** el video/audio, elige idioma/calidad y pulsa
 - **Separar quien habla** → identifica Hablante 1, 2…
 - **Guardar organizado por curso** → elige la **carpeta** donde se guardan los
   cursos y añade cursos con **➕ Curso** (se guardan en tu `cursos.json` local).
-  Cada transcripción queda en `…\<Curso>\Semana N\sesionM.txt` (+ `.srt`).
+  Cada transcripción queda solo como `.txt` en la carpeta del curso, con el
+  nombre del video: `…\<Curso>\<nombre del video>.txt`.
 
 ## Forma por línea de comandos
 

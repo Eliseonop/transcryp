@@ -42,7 +42,8 @@ Se abre la ventana: arrastra un video/audio, elige idioma y pulsa **Transcribir*
 Marca **Guardar organizado por curso**, elige la **carpeta** donde se guardan y
 añade cursos con **➕ Curso**. Tus cursos quedan en un `cursos.json` local (no se
 sube al repositorio; usa [`cursos.example.json`](cursos.example.json) como
-referencia). Cada transcripción se guarda en `…\<Curso>\Semana N\sesionM.txt`.
+referencia). Cada curso es una sola carpeta y cada transcripción se guarda ahí
+como `.txt` con el nombre del video: `…\<Curso>\<nombre del video>.txt`.
 
 ### Modelos que se descargan solos
 

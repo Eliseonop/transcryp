@@ -26,8 +26,8 @@ if str(RAIZ_PROYECTO) not in sys.path:
     sys.path.insert(0, str(RAIZ_PROYECTO))
 
 import transcribir as T  # noqa: E402
-from cursos import (limpiar_nombre, semanas_existentes,  # noqa: E402
-                    detectar_semana_sesion)
+from cursos import (limpiar_nombre, transcripciones_existentes,  # noqa: E402
+                    ruta_txt_libre)
 from app import config, setup_modelos  # noqa: E402
 
 # Drag & drop (opcional): si no esta instalado, la app sigue funcionando con el boton.
@@ -129,6 +129,7 @@ class App:
         self.root = root
         self.modelo = None
         self.modelo_nombre = None
+        self.modelo_device = "cpu"
         self.cargando_modelo = False
         self.archivo = None
         self.trabajando = False
@@ -211,24 +212,13 @@ class App:
         if self.cursos:
             self.cbo_curso.current(0)
         self.cbo_curso.grid(row=2, column=1, columnspan=2, sticky="w", pady=(6, 0))
-        self.cbo_curso.bind("<<ComboboxSelected>>", lambda e: self._mostrar_semanas())
+        self.cbo_curso.bind("<<ComboboxSelected>>", lambda e: self._mostrar_curso())
         ttk.Button(cur, text="➕ Curso", width=10,
                    command=self._anadir_curso).grid(
             row=2, column=3, sticky="e", pady=(6, 0))
 
-        ttk.Label(cur, text="Semana:").grid(
-            row=3, column=0, sticky="w", padx=(20, 6), pady=(6, 0))
-        self.ent_semana = ttk.Entry(cur, width=8, state="disabled")
-        self.ent_semana.grid(row=3, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(cur, text="Sesion:").grid(
-            row=3, column=2, sticky="w", padx=(12, 6), pady=(6, 0))
-        self.cbo_sesion = ttk.Combobox(
-            cur, state="disabled", width=12, values=["Automatico", "1", "2"])
-        self.cbo_sesion.current(0)
-        self.cbo_sesion.grid(row=3, column=3, sticky="w", pady=(6, 0))
-
         self.lbl_curso = ttk.Label(cur, text="", foreground="#5a6472")
-        self.lbl_curso.grid(row=4, column=0, columnspan=4, sticky="w",
+        self.lbl_curso.grid(row=3, column=0, columnspan=4, sticky="w",
                             padx=(20, 0), pady=(4, 0))
         self._refrescar_carpeta()
 
@@ -335,13 +325,11 @@ class App:
     def _toggle_curso(self):
         on = self.var_curso.get()
         self.cbo_curso.config(state=("readonly" if on and self.cursos else "disabled"))
-        self.ent_semana.config(state=("normal" if on else "disabled"))
-        self.cbo_sesion.config(state=("readonly" if on else "disabled"))
         if on and not self.cursos:
             self.lbl_curso.config(
                 text="Aun no hay cursos. Pulsa '➕ Curso' para anadir el primero.")
         elif on:
-            self._mostrar_semanas()
+            self._mostrar_curso()
         else:
             self.lbl_curso.config(text="")
 
@@ -356,7 +344,7 @@ class App:
             config.guardar_carpeta_cursos(ruta)
             self._refrescar_carpeta()
             if self.var_curso.get():
-                self._mostrar_semanas()
+                self._mostrar_curso()
 
     def _anadir_curso(self):
         nombre = simpledialog.askstring(
@@ -373,22 +361,22 @@ class App:
                                    if nombre.strip() in nombres else len(nombres) - 1)
         if self.var_curso.get():
             self.cbo_curso.config(state="readonly")
-            self._mostrar_semanas()
+            self._mostrar_curso()
 
-    def _mostrar_semanas(self):
+    def _curso_dir(self, curso) -> Path:
+        return config.carpeta_cursos() / limpiar_nombre(curso["nombre"])
+
+    def _mostrar_curso(self):
         if not self.cursos:
             return
         idx = self.cbo_curso.current()
         if idx < 0:
             return
-        curso_dir = config.carpeta_cursos() / limpiar_nombre(self.cursos[idx]["nombre"])
-        ex = semanas_existentes(curso_dir)
-        if ex:
-            self.lbl_curso.config(
-                text=f"Semanas guardadas: {ex}   ·   vacio = automatico (la que sigue)")
-        else:
-            self.lbl_curso.config(
-                text="Sin semanas aun.   ·   vacio = automatico (empieza en Semana 1)")
+        n = transcripciones_existentes(self._curso_dir(self.cursos[idx]))
+        guardadas = (f"{n} transcripcion(es) guardada(s)" if n
+                     else "Sin transcripciones aun")
+        self.lbl_curso.config(
+            text=f"{guardadas}   ·   se guarda el .txt con el nombre del video")
 
     # ---------- transcripcion ----------
     def transcribir(self):
@@ -402,12 +390,7 @@ class App:
                     "Aun no hay cursos. Pulsa '➕ Curso' para anadir uno.")
                 return
             idx = self.cbo_curso.current()
-            ses = self.cbo_sesion.get()
-            self._curso_info = {
-                "curso": self.cursos[idx if idx >= 0 else 0],
-                "semana_in": self.ent_semana.get().strip(),
-                "sesion_in": ses if ses in ("1", "2") else "",
-            }
+            self._curso_info = {"curso": self.cursos[idx if idx >= 0 else 0]}
         self.trabajando = True
         self.btn_go.config(state="disabled")
         self._resetear_resultado()
@@ -465,7 +448,7 @@ class App:
             # 1) cargar modelo (una vez, o si cambio de calidad)
             if self.modelo is None or self.modelo_nombre != modelo_nom:
                 self._estado(f"Cargando modelo {modelo_nom} (la 1a vez descarga datos)…", 0)
-                self.modelo, *_ = T.cargar_modelo(modelo_nom)
+                self.modelo, self.modelo_device, _ = T.cargar_modelo(modelo_nom)
                 self.modelo_nombre = modelo_nom
 
             sd = None
@@ -477,12 +460,12 @@ class App:
                 self._estado("Cargando identificador de hablantes…", 0)
                 sd = T.cargar_diarizador(0)
 
-            # 2) transcribir con progreso
+            # 2) transcribir con progreso (por lotes = mucho mas rapido)
+            lote = T.tam_lote(self.modelo_device, self.modelo_nombre)
             self._estado("Transcribiendo…", 0)
             dur = duracion_segundos(ruta) or 0
-            seg_iter, info = self.modelo.transcribe(
-                str(ruta), language=idioma, vad_filter=True, beam_size=5,
-                word_timestamps=bool(sd))
+            seg_iter, info = T.abrir_transcripcion(
+                self.modelo, ruta, idioma=idioma, palabras=bool(sd), lote=lote)
             total = getattr(info, "duration", 0) or dur or 0
 
             segmentos = []
@@ -519,9 +502,9 @@ class App:
         self.btn_copiar.config(state="normal")
         self.barra["value"] = 100
 
-        # modo curso: guarda ordenado en Escritorio\Cursos sin importar la duracion
+        # modo curso: guarda el .txt en la carpeta del curso sin importar la duracion
         if self._curso_info:
-            self._guardar_en_curso(segmentos, tardo)
+            self._guardar_en_curso(ruta, segmentos, tardo)
             return
 
         if corto:
@@ -543,24 +526,19 @@ class App:
             self.btn_guardar.config(state="normal")
             self.btn_carpeta.config(state="normal")
 
-    def _guardar_en_curso(self, segmentos, tardo):
-        info = self._curso_info
-        curso = info["curso"]
-        curso_dir = config.carpeta_cursos() / limpiar_nombre(curso["nombre"])
-        semana, sesion = detectar_semana_sesion(
-            curso_dir, info["semana_in"], info["sesion_in"])
-        destino_dir = curso_dir / f"Semana {semana}"
-        destino_dir.mkdir(parents=True, exist_ok=True)
-        base = destino_dir / f"sesion{sesion}"
-        T.guardar(segmentos, base, ["txt", "srt"])
-        self.ultimo_dir = destino_dir
+    def _guardar_en_curso(self, ruta, segmentos, tardo):
+        """Una carpeta por curso y dentro solo el .txt: <Curso>\\<nombre del video>.txt"""
+        curso = self._curso_info["curso"]
+        curso_dir = self._curso_dir(curso)
+        curso_dir.mkdir(parents=True, exist_ok=True)
+        destino = ruta_txt_libre(curso_dir, ruta.stem)
+        T.escribir_txt(segmentos, destino)
+        self.ultimo_dir = curso_dir
         self.lbl_res.config(text=f"Guardado en el curso ({T.mmss(tardo)}):")
-        self.lbl_info.config(
-            text=(f"✓ {curso['nombre']}  ->  Semana {semana} / sesion{sesion}\n"
-                  f"{base.with_suffix('.txt')}   (+ .srt)"))
+        self.lbl_info.config(text=f"✓ {curso['nombre']}  ->  {destino}")
         self.btn_guardar.config(state="normal")
         self.btn_carpeta.config(state="normal")
-        self._mostrar_semanas()
+        self._mostrar_curso()
 
     def _error(self, e):
         self.barra["value"] = 0
