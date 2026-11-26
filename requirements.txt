@@ -1,0 +1,28 @@
+# Dependencias del transcriptor.
+# Lo mas facil: doble clic en instalar.bat (crea el .venv e instala todo esto).
+# A mano:
+#   python -m venv .venv
+#   .\.venv\Scripts\pip install -r requirements.txt
+#
+# ffmpeg es opcional (muestra la duracion de los videos):  winget install ffmpeg
+
+faster-whisper==1.2.1
+# faster-whisper 1.2.1 llama av.open(..., metadata_errors=...), que PyAV 19 elimino.
+av<19
+sherpa-onnx==1.13.5
+
+# Arrastrar y soltar archivos en la ventana (opcional; la app funciona sin el)
+tkinterdnd2
+
+# Traductor en vivo (ingles -> espanol):
+#   soundcard     -> escuchar lo que suena en el PC o un microfono
+#   sentencepiece -> traductor "Local (sin internet)" (con Google no hace falta)
+soundcard==0.4.6
+sentencepiece==0.2.3
+
+# Aceleracion por GPU NVIDIA (CUDA). instalar.bat solo las instala si detecta una
+# tarjeta NVIDIA. Si instalas a mano sin GPU NVIDIA, comenta estas lineas; el
+# programa cae automaticamente a CPU.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.24.0.43
+nvidia-cuda-nvrtc-cu12==12.9.86

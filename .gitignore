@@ -1,0 +1,32 @@
+# Entorno virtual de Python (2+ GB, se recrea con pip install)
+.venv/
+venv/
+env/
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Modelos de diarizacion (se descargan con el boton "Verificar / Preparar")
+modelos/
+
+# IDE
+.idea/
+.vscode/
+
+# Datos locales de cada usuario (se crean desde la interfaz, no se suben).
+# Usa cursos.example.json como plantilla.
+cursos.json
+config.json
+
+# Transcripciones generadas
+Transcripciones/
+General/
+*.srt
+*.vtt
+
+# Sistema
+Thumbs.db
+.DS_Store

@@ -1,0 +1,68 @@
+{
+  "app/__init__.py": {
+    "mtime": 1786931118.8127232,
+    "seen": 1789507247.2882414,
+    "ast_hash": "963050771d553c08ee28843afc1d4387",
+    "semantic_hash": ""
+  },
+  "app/config.py": {
+    "mtime": 1787528283.7786145,
+    "seen": 1789507247.2882414,
+    "ast_hash": "201a3bdd11eb602ca7db599361d69d81",
+    "semantic_hash": ""
+  },
+  "app/gui.py": {
+    "mtime": 1789507152.4393775,
+    "seen": 1789507247.2882414,
+    "ast_hash": "835a55955803e5eeebda62c6977144d0",
+    "semantic_hash": ""
+  },
+  "app/setup_modelos.py": {
+    "mtime": 1786938265.2183392,
+    "seen": 1789507247.2882414,
+    "ast_hash": "45daa95c9835157fd2a7c9d640bbcfd0",
+    "semantic_hash": ""
+  },
+  "cursos.example.json": {
+    "mtime": 1787528685.8661675,
+    "seen": 1789507247.2882414,
+    "ast_hash": "793e872212424529223eb722ca12334a",
+    "semantic_hash": ""
+  },
+  "cursos.py": {
+    "mtime": 1787528294.0503037,
+    "seen": 1789507247.2882414,
+    "ast_hash": "35d95a3b4427a5c58d5bc096b84932f3",
+    "semantic_hash": ""
+  },
+  "main.py": {
+    "mtime": 1787016364.591163,
+    "seen": 1789507247.2882414,
+    "ast_hash": "8a3c63d69f33589a3c0b9cacc3565c1f",
+    "semantic_hash": ""
+  },
+  "transcribir.py": {
+    "mtime": 1789507148.6055405,
+    "seen": 1789507247.2882414,
+    "ast_hash": "b1f9ec9c4ae4c3c5fdcc7ecc1fc722c3",
+    "semantic_hash": ""
+  },
+  "LEEME.md": {
+    "mtime": 1787528396.1822698,
+    "seen": 1789507247.2882414,
+    "ast_hash": "dc62abf1525d468ff6a59708d7af7fe0",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1787528402.4480166,
+    "seen": 1789507247.2882414,
+    "ast_hash": "63935e0da173a7a81320b420ae5d43dd",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1786938322.0154479,
+    "seen": 1789507247.2882414,
+    "ast_hash": "68b1cc1f7cff00769e80d3f56ad4b992",
+    "semantic_hash": ""
+  }
+}

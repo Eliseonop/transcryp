@@ -1,0 +1,4 @@
+# Los .bat necesitan finales de linea de Windows (CRLF): con solo LF, cmd.exe
+# puede fallar al saltar a etiquetas (goto / call).
+*.bat text eol=crlf
+*.cmd text eol=crlf
